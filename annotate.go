@@ -1,36 +1,60 @@
 package annotations
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 )
 
 
-func Process(dir string) {
-	files := getSourceFiles(dir)
+func Process() {
+	files := getSourceFiles(*Option.Dir)
 	for _, file := range files {
+		if *Option.Verbose {
+			fmt.Printf("Reading source file: %s\n",file)
+		}
 		f, err := readSourceFile(file)
 		if err != nil {
+			if *Option.AbortOnError {
+				fmt.Printf("Aborting due to error when reading source file: %s, error: %s",file, err)
+				os.Exit(1)
+			}
 			fmt.Printf("Skipping file: %s due to error: %s",file, err)
 			continue
 		}
-		collectWishes(file,f)
+		wishes := collectWishes(file,f)
+		if wishes != nil {
+			fulfilWishes(wishes, file, f.Name.Name)
+		}
 	}
-	fulfilWishes()
+
 }
-
-
 
 func getSourceFiles(dir string) []string {
 	var files []string
+	ignoreFilesWithPattern := []string{"_test.go", "_wish.go"}
+	if *Option.IgnoreFiles != "" {
+		userPatterns := strings.Split(*Option.IgnoreFiles, ",")
+		for _, userPattern := range userPatterns{
+			ignoreFilesWithPattern = append(ignoreFilesWithPattern, strings.TrimSpace(userPattern))
+		}
+	}
+	dontIgnore := func (path string)bool {
+		for _, pattern := range ignoreFilesWithPattern {
+			if strings.HasSuffix(path, pattern) {
+				return false
+			}
+		}
+		return true
+	}
 	filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
-		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path,"_test.go") {
-			fmt.Println("Go",path)
+		if strings.HasSuffix(path, ".go") && dontIgnore(path) {
 			files = append(files, path)
 		}
 		return nil
@@ -43,34 +67,43 @@ func readSourceFile(file string) (f *ast.File, err error) {
 	return parser.ParseFile(fs,file,nil, parser.ParseComments)
 }
 
-func collectWishes(file string, f *ast.File) {
+func collectWishes(file string, f *ast.File) []*wish{
 	// Loop through the declarations.
+	var wishingWell []*wish
 	for _, d := range f.Decls {
 		// If this declaration is GenDecl type then go further.
 		if t,ok := d.(*ast.GenDecl); ok && t.Tok == token.TYPE {
 			ts := t.Specs[0].(*ast.TypeSpec)
 			st, ok := t.Specs[0].(*ast.TypeSpec).Type.(*ast.StructType)
 			if ok && !st.Incomplete {
-				handleWishForStruct(file, f, t, ts, st)
+				wishes := findWishesForStruct(file, f, t, ts, st)
+				if wishes != nil {
+					for _, wish := range wishes{
+						wishingWell = append(wishingWell, wish)
+					}
+				}
 			}
 		}
 	}
+	return wishingWell
 }
 
-func handleWishForStruct(file string, f *ast.File, t *ast.GenDecl, ts *ast.TypeSpec, st *ast.StructType) {
+func findWishesForStruct(file string, f *ast.File, t *ast.GenDecl, ts *ast.TypeSpec, st *ast.StructType) []*wish{
+	var wishingWell []*wish
 	if t.Doc != nil {
 		comment := t.Doc.Text()
 		if hasAnyWish(comment) {
 			wishes := getWishes(comment)
-			fmt.Printf("Struct: %s, Wishes: %v\n", ts.Name, wishes)
+			if *Option.Verbose {
+				fmt.Printf("Found Wishes: %v for struct: %s in file: %s\n", wishes, ts.Name, file)
+			}
+
 			w := &wish{
-				forFile:    file,
-				forPackage: f.Name.Name,
 				forStruct:  ts.Name.Name,
 				wishes:     wishes,
 				field:      st.Fields.List,
 			}
-			addWish(w)
+			wishingWell = append(wishingWell, w)
 		}
 		// This declaration does not have wishes at struct level.
 		// Check if any of the field has any wishes.
@@ -81,20 +114,21 @@ func handleWishForStruct(file string, f *ast.File, t *ast.GenDecl, ts *ast.TypeS
 					comment := gc.Text()
 					if hasAnyWish(comment) {
 						wishes := getWishes(comment)
-						fmt.Printf("Struct: %s, Field: %s, Wishes: %v\n", ts.Name, field.Names[0].Name, wishes)
+						if *Option.Verbose {
+							fmt.Printf("Found Wishes: %v for field: %s.%s in file: %s\n", wishes, ts.Name,field.Names[0].Name, file)
+						}
 						w := &wish{
-							forFile:    file,
-							forPackage: f.Name.Name,
 							forStruct:  ts.Name.Name,
 							wishes:     wishes,
 							field:      field,
 						}
-						addWish(w)
+						wishingWell = append(wishingWell, w)
 					}
 				}
 			}
 		}
 	}
+	return wishingWell
 }
 
 func hasAnyWish(comment string) bool {
@@ -125,16 +159,52 @@ func getWishes(comment string) []string {
 	return wishes
 }
 
-func fulfilWishes() {
+func fulfilWishes(wishingWell []*wish, fileName, packageNAme string) {
+	var output bytes.Buffer
 	for _, wish := range wishingWell {
 		for _, angelName := range wish.wishes {
 			// Check if angel exists for this angelName.
-			if angel, ok := angels[angelName]; ok {
-				b := angel(wish.forFile, wish.forPackage,wish.forStruct,wish.field)
-				fmt.Println(string(b))
-			}else {
-				panic(fmt.Sprintf("No angel for wish: %s\n",angelName))
+			angel, ok := angels[angelName]
+			if !ok {
+				errMessage := fmt.Sprintf("No angel for wish: %s",angelName)
+				if *Option.AbortOnError {
+					panic(errMessage)
+				}
+				fmt.Println(errMessage)
+				continue
 			}
+			b := angel(fileName, packageNAme,wish.forStruct,wish.field)
+			if b != nil {
+				output.Write(b)
+			}
+		}
+	}
+	if output.Len() > 0 {
+		topLine := fmt.Sprintf("// Code generated by WishGen. DO NOT EDIT.\n// Source: %s\npackage %s\n",fileName,packageNAme)
+		if *Option.OutputToStdOutOnly {
+			fmt.Print(topLine)
+			fmt.Print(output.String())
+			return
+		}
+		dir, file := filepath.Split(fileName)
+		if dir == "" {
+			dir = "."
+		}
+		newFile := strings.Split(file, ".")[0]+"_wish.go"
+		newFile = dir + string(filepath.Separator) + newFile
+		outFile, err := os.OpenFile(newFile,os.O_WRONLY|os.O_CREATE|os.O_TRUNC,os.ModePerm)
+		if err != nil {
+			errText := fmt.Sprintf("unable to create outfile: %s. Error: %s",newFile,err)
+			if *Option.AbortOnError {
+				panic(errText)
+			}
+			fmt.Println(errText)
+		}
+		outFile.WriteString(topLine)
+		outFile.WriteString(output.String())
+		outFile.Close()
+		if *Option.Verbose {
+			fmt.Printf("Wish completed for source file %s. See %s for output.",fileName,newFile)
 		}
 	}
 }

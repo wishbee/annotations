@@ -21,9 +21,8 @@ func set(fileName, packagName, structName string, field interface{}) []byte {
 	fieldName := f.Names[0].Name
 	fieldType := fieldType(f)
 	s := fmt.Sprintf("func (s *%s)Set%s(v %s) {\n"+
-		"	s.%s = %s\n"+
-		"}\n", structName, strings.Title(fieldName), fieldType, fieldName, fieldName)
-	//fmt.Println(s)
+		"	s.%s = v\n"+
+		"}\n", structName, strings.Title(fieldName), fieldType, fieldName)
 	return []byte(s)
 }
 
@@ -37,7 +36,6 @@ func get(fileName, packagName, structName string, field interface{}) []byte {
 	s := fmt.Sprintf("func (s *%s)Get%s() %s {\n"+
 		"	return s.%s\n"+
 		"}\n", structName, strings.Title(fieldName), fieldType, fieldName)
-	//fmt.Println(s)
 	return []byte(s)
 }
 
