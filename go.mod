@@ -1,3 +1,3 @@
-module gitgub.com/wishbee/annotations
+module github.com/wishbee/annotations
 
 go 1.17
