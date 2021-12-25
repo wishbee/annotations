@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gitgub.com/wishbee/annotations"
+	"github.com/wishbee/annotations"
 )
 
 func main() {
