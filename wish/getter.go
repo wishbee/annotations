@@ -11,18 +11,15 @@ type getter struct {
 	multiField
 }
 
-func NewGetterWish(fileName, packageName, structName string, fields []*ast.Field) Wish {
+func NewGetterWish(wishData *WishData, fileName, packageName, structName string, fields []*ast.Field) Wish {
 	return &getter{multiField{
+		wishData:    wishData,
 		fileName:    fileName,
 		packageName: packageName,
 		structName:  structName,
 		fields:      fields,
 	},
 	}
-}
-
-func (r *getter) Name() string {
-	return "getter"
 }
 
 func (r *getter) FullFill() []byte {

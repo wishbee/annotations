@@ -11,18 +11,15 @@ type setter struct {
 	multiField
 }
 
-func NewSetterWish(fileName, packageName, structName string, fields []*ast.Field) Wish {
+func NewSetterWish(wishData *WishData, fileName, packageName, structName string, fields []*ast.Field) Wish {
 	return &setter{multiField{
+		wishData:    wishData,
 		fileName:    fileName,
 		packageName: packageName,
 		structName:  structName,
 		fields:      fields,
 	},
 	}
-}
-
-func (r *setter) Name() string {
-	return "setter"
 }
 
 func (r *setter) FullFill() []byte {

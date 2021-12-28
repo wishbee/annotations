@@ -98,28 +98,16 @@ func findWishesForStruct(file string, f *ast.File, t *ast.GenDecl, ts *ast.TypeS
 			}
 			var w wish.Wish
 			for _, wishName := range wishes {
-				if !wish.IsValidWishName(wishName) {
+				wishData := wish.ParseWishData(wishName)
+				w = wish.MakeAStructLevelWish(wishData, file, f.Name.Name, ts.Name.Name, st.Fields.List)
+				if w == nil {
 					errText := fmt.Sprintf("encountered invalid wish: %s in file: %s for struct: %s", wishName, file, ts.Name)
 					if *Option.AbortOnError {
 						panic(errText)
 					}
 					fmt.Println(errText)
 				}
-				if wishName == "setter" {
-					w = wish.NewSetterWish(file, f.Name.Name, ts.Name.Name, st.Fields.List)
-					wishingWell = append(wishingWell, w)
-					continue
-				}
-				if wishName == "getter" {
-					w = wish.NewGetterWish(file, f.Name.Name, ts.Name.Name, st.Fields.List)
-					wishingWell = append(wishingWell, w)
-					continue
-				}
-				if wishName == "fluent" {
-					w = wish.NewFluentWish(file, f.Name.Name, ts.Name.Name, st.Fields.List)
-					wishingWell = append(wishingWell, w)
-					continue
-				}
+				wishingWell = append(wishingWell, w)
 			}
 		}
 		// This declaration does not have wishes at struct level.
@@ -135,19 +123,17 @@ func findWishesForStruct(file string, f *ast.File, t *ast.GenDecl, ts *ast.TypeS
 							fmt.Printf("Found Wishes: %v for field: %s.%s in file: %s\n", wishes, ts.Name, field.Names[0].Name, file)
 						}
 						var w wish.Wish
-						singleField := make([]*ast.Field, 1)
-						singleField[0] = field
 						for _, wishName := range wishes {
-							if wishName == "setter" {
-								w = wish.NewSetterWish(file, f.Name.Name, ts.Name.Name, singleField)
-								wishingWell = append(wishingWell, w)
-								continue
+							wishData := wish.ParseWishData(wishName)
+							w = wish.MakeAFieldLevelWish(wishData, file, f.Name.Name, ts.Name.Name, field)
+							if w == nil {
+								errText := fmt.Sprintf("encountered invalid wish: %s in file: %s for struct: %s", wishName, file, ts.Name)
+								if *Option.AbortOnError {
+									panic(errText)
+								}
+								fmt.Println(errText)
 							}
-							if wishName == "getter" {
-								w = wish.NewGetterWish(file, f.Name.Name, ts.Name.Name, singleField)
-								wishingWell = append(wishingWell, w)
-								continue
-							}
+							wishingWell = append(wishingWell, w)
 						}
 					}
 				}

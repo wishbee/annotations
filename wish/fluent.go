@@ -15,18 +15,15 @@ type fluent struct {
 	multiField
 }
 
-func NewFluentWish(fileName, packageName, structName string, fields []*ast.Field) Wish {
+func NewFluentWish(wishData *WishData, fileName, packageName, structName string, fields []*ast.Field) Wish {
 	return &fluent{multiField{
+		wishData:    wishData,
 		fileName:    fileName,
 		packageName: packageName,
 		structName:  structName,
 		fields:      fields,
 	},
 	}
-}
-
-func (r *fluent) Name() string {
-	return "fluent"
 }
 
 func (r *fluent) FullFill() []byte {
