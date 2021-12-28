@@ -5,12 +5,13 @@ package sample
 
 /* SomeStruct type encapsulate some structure.
  * Below annotation will generate the 'setXXX' methods for all the fields in this struct.
- * @wish:setters
- * Below annotation will generate the 'getXXX' methods for all the fields in this struct.
- * @wish:getters
+ * @wish:setter
+ * Below annotation will generate the 'XXX' methods for all the fields in this struct.
+ * These methods will simply return the value of the field.
+ * @wish:getter
  */
 type SomeStruct struct {
-	age int
+	age  int
 	name string
 }
 
@@ -20,13 +21,27 @@ type SomeStruct struct {
 type AnotherStruct struct {
 	ID int
 	/*
-	 * Below annotation will generate the 'setName' method for the 'name' field for this this struct.
-	@wish:set
-	 */
+		 * Below annotation will generate the 'setName' method for the 'name' field for this this struct.
+					@wish:setter
+	*/
 	name string
 }
 
 // SomInterface is an Empty interface
 type SomInterface interface {
 	MethodA()
+}
+
+/*
+	@wish:fluent
+*/
+type SomeTypeForFluent struct {
+	age  int
+	name string
+}
+
+// Once above wish is fulfilled then below method should compile without error.
+func fluentTypeUse() {
+	s := &SomeTypeForFluent{}
+	s.SetName("Bill").SetAge(35)
 }
